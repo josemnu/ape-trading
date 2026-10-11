@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APE · Paper trading</title>
+<style>
+:root{--bg:#f7f6f2;--fg:#1c1e22;--muted:#626875;--card:#fff;--line:#e3e0d8;--day:#2563eb;--scalp:#c2410c;--pos:#15803d;--neg:#b91c1c;--warn:#fef3c7;--warn-fg:#78350f}
+@media (prefers-color-scheme:dark){:root{--bg:#131518;--fg:#ebeae6;--muted:#9aa0ab;--card:#1b1e22;--line:#2b2f35;--day:#60a5fa;--scalp:#fb923c;--pos:#4ade80;--neg:#f87171;--warn:#3b2f0b;--warn-fg:#fde68a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 48px}h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:32px 0 12px}
+.muted{color:var(--muted)}.banner{background:var(--warn);color:var(--warn-fg);border-radius:8px;padding:10px 14px;margin:16px 0;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h3{margin:0 0 2px;font-size:16px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.kpi b{display:block;font-size:18px}.kpi span{font-size:12px;color:var(--muted)}
+.pos{color:var(--pos)}.neg{color:var(--neg)}table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{font-size:12px;color:var(--muted);font-weight:600}
+.scroll{overflow-x:auto}svg{width:100%;height:auto;display:block}.legend{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Paper trading · Day trading, Scalping y Estrategia APE</h1>
+  <div class="muted" id="sub">Cargando…</div>
+  <div class="banner"><b>SIMULACIÓN con dinero ficticio.</b> No hay ninguna conexión con un bróker y no es asesoramiento financiero. Backtest: la estrategia de day trading ganó en 4 de 4 trimestres fuera de muestra (+15 %); para scalping no se encontró ninguna estrategia rentable tras comisiones.</div>
+  <div class="grid" id="cards"></div>
+  <h2>Evolución del saldo</h2>
+  <div class="card"><svg id="chart" viewBox="0 0 900 260" role="img" aria-label="Saldo de las dos cuentas"></svg><div class="legend" id="legend"></div></div>
+  <h2>PnL diario (hora de Madrid)</h2>
+  <div class="scroll"><table id="daily"></table></div>
+  <h2>Últimas operaciones</h2>
+  <div class="scroll"><table id="trades"></table></div>
+  <h2>Cómo se eligieron las estrategias</h2>
+  <div class="scroll"><table id="bt"></table></div>
+  <p class="muted" id="foot"></p>
+</main>
+<script>
+const fmt = (c) => (c/100).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' $';
+const sign = (c) => (c>0?'+':'') + fmt(c);
+const cls = (v) => v>0?'pos':(v<0?'neg':'');
+const el = (tag, text, className) => { const e = document.createElement(tag); if (text!==undefined) e.textContent = text; if (className) e.className = className; return e; };
+function row(cells, head){ const tr = el('tr'); cells.forEach(c => { const td = el(head?'th':'td'); if (c && typeof c==='object'){ td.textContent=c.t; if(c.c) td.className=c.c; } else td.textContent = c; tr.appendChild(td); }); return tr; }
+function render(d){
+  document.getElementById('sub').textContent = `Programa de ${d.program.days_total} días: ${d.program.start} → ${d.program.end} · día ${d.program.days_elapsed} · actualizado ${d.updated}`;
+  const cards = document.getElementById('cards'); cards.replaceChildren();
+  d.accounts.forEach(a => {
+    const c = el('div', undefined, 'card'); const h = el('h3'); const dot = el('span', undefined, 'dot'); dot.style.background = a.color; h.append(dot, a.label); c.appendChild(h);
+    c.appendChild(el('div', `${a.strategy} · ${a.symbol}`, 'muted'));
+    const k = el('div', undefined, 'kpis');
+    [[fmt(a.initial_cents),'Balance inicial',''],[fmt(a.equity_cents),'Saldo actual',''],[`${sign(a.pnl_cents)} (${a.pnl_pct>0?'+':''}${a.pnl_pct.toFixed(2)} %)`,'PnL total',cls(a.pnl_cents)]].forEach(([v,l,cl]) => { const x = el('div', undefined, 'kpi'); x.append(el('b', v, cl), el('span', l)); k.appendChild(x); });
+    c.appendChild(k);
+    c.appendChild(el('div', `${a.trades} operaciones · acierto ${a.win_rate_pct ?? '—'} %` + (a.open ? (a.open.count ? ` · ${a.open.count} posiciones abiertas (${a.open.symbols.join(', ')})` : ` · posición abierta: ${a.open.side==='long'?'LARGO':'CORTO'} desde ${a.open.px_in.toFixed(2)}`) : ' · sin posición abierta'), 'muted'));
+    cards.appendChild(c);
+  });
+  // Gráfico
+  const svg = document.getElementById('chart'); svg.replaceChildren();
+  const series = d.accounts.map(a => a.daily.map(x => x.equity_end_cents));
+  const all = series.flat().concat(d.accounts.map(a => a.initial_cents));
+  const lo = Math.min(...all), hi = Math.max(...all), pad = (hi-lo)*0.1 || 1000; const n = Math.max(...series.map(s => s.length), 2);
+  const X = i => 40 + i*(840/(n-1||1)), Y = v => 230 - (v-(lo-pad))/((hi+pad)-(lo-pad))*210;
+  const ns = 'http://www.w3.org/2000/svg';
+  const base = document.createElementNS(ns,'line'); base.setAttribute('x1',40); base.setAttribute('x2',880); const y0 = Y(d.accounts[0].initial_cents); base.setAttribute('y1',y0); base.setAttribute('y2',y0); base.setAttribute('stroke','currentColor'); base.setAttribute('stroke-opacity','0.25'); base.setAttribute('stroke-dasharray','4 4'); svg.appendChild(base);
+  d.accounts.forEach((a, k) => { const pts = [a.initial_cents, ...series[k]]; const p = document.createElementNS(ns,'polyline'); p.setAttribute('points', pts.map((v,i) => `${X(i*(n-1)/(pts.length-1||1))},${Y(v)}`).join(' ')); p.setAttribute('fill','none'); p.setAttribute('stroke', a.color); p.setAttribute('stroke-width','2.5'); svg.appendChild(p); });
+  document.getElementById('legend').textContent = d.accounts.map(a => `${a.label}: ${fmt(a.equity_cents)}`).join('   ·   ') + '   ·   línea discontinua = balance inicial';
+  // PnL diario
+  const days = [...new Set(d.accounts.flatMap(a => a.daily.map(x => x.day)))].sort().reverse();
+  const t = document.getElementById('daily'); t.replaceChildren(row(['Día', ...d.accounts.flatMap(a => [`${a.label} PnL`, 'Saldo'])], true));
+  days.forEach(day => t.appendChild(row([day, ...d.accounts.flatMap(a => { const x = a.daily.find(z => z.day===day); return x ? [{t: sign(x.pnl_cents), c: cls(x.pnl_cents)}, fmt(x.equity_end_cents)] : ['—','—']; })])));
+  if (!days.length) t.appendChild(row(['Sin datos todavía','','','','']));
+  // Operaciones
+  const tr = document.getElementById('trades'); tr.replaceChildren(row(['Cierre','Cuenta','Activo','Lado','Entrada','Salida','Motivo','Resultado'], true));
+  d.recent_trades.forEach(x => tr.appendChild(row([x.exit, x.account, (x.symbol||'').replace('USDT',''), x.side==='long'?'Largo':'Corto', x.px_in.toFixed(2), x.px_out.toFixed(2), x.reason, {t: `${(x.ret*100).toFixed(2)} % (${sign(x.pnl_cents)})`, c: cls(x.pnl_cents)}])));
+  if (!d.recent_trades.length) tr.appendChild(row(['Aún no hay operaciones cerradas','','','','','','','']));
+  // Backtest
+  const bt = document.getElementById('bt'); bt.replaceChildren(row(['Tipo','Estrategia ganadora','Ajuste (12 meses previos)','Prueba fuera de muestra (4 trimestres)','Comprar y mantener (prueba)'], true));
+  d.backtest.forEach(b => bt.appendChild(row([b.kind, b.label, `${b.train_net>0?'+':''}${b.train_net} % (${b.train_trades} op.)`, {t:`${b.test_net>0?'+':''}${b.test_net} % (${b.test_trades} op.)`, c: cls(b.test_net)}, `${b.hold>0?'+':''}${b.hold} %`])));
+  document.getElementById('foot').textContent = d.note;
+}
+async function load(){ try { if (window.APE_DATA) { render(window.APE_DATA); return; } const r = await fetch('data.json?t=' + Date.now(), {cache:'no-store'}); render(await r.json()); } catch(e){ document.getElementById('sub').textContent = 'No se pudieron cargar los datos.'; } }
+load(); setInterval(() => window.APE_DATA ? location.reload() : load(), 60000);
+</script>
+</body>
+</html>
